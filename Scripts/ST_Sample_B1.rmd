@@ -1,0 +1,268 @@
+---
+title: "Sample_B1"
+author: "Archana"
+date: "2023-10-19"
+output: html_document
+---
+
+```{r}
+
+library(Seurat)
+library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+```
+
+
+
+In this tutorial, we will cover important Steps for Spatial Transcriptome (ST) data analysis 1) Check Raw data 2) Perform QC 3) Data Normalization 4) Cluster Identification 5) Subset Seurat object based on Anatomical regions 6) Data Visualization of 6.1) Spatial Expression plots 6.2) Spatial Clusters
+
+The visium test data from 10x consists of the following data types: a) A spot by gene expression matrix [ .h5 format]. b) An image of the tissue slice (obtained from H&E staining during data acquisition) [Spatial]. c) Scaling factors that relate the original high resolution image to the lower resolution image used here for visualization [Spatial].
+
+# 1) Check Raw ST data
+
+Load ST data#
+
+```{r}
+
+data.dir <- "Input/V19S23-097_B1"
+data <- Load10X_Spatial(data.dir, "filtered_feature_bc_matrix.h5",  assay = "Spatial",
+                        slice = "B1")
+data
+```
+
+Add Section label
+
+```{r}
+data$orig.ident <- "B1"
+
+```
+
+In the Seurat object, the spot by gene expression matrix is similar to a typical "RNA" Assay but contains spot level.
+
+Lets check raw data.
+
+```{r}
+plot1 <- VlnPlot(data, features = "nCount_Spatial", pt.size = 0.2) + NoLegend() 
+plot1
+```
+
+Visualize raw data on studied tissue image
+
+```{r}
+
+plot2 <- SpatialFeaturePlot(data, features = "nCount_Spatial") + theme(legend.position = "right")
+plot2
+wrap_plots(plot1, plot2)
+```
+
+Lets calculate percentage of mitochondrial genes
+
+```{r}
+data <- PercentageFeatureSet(data, "^mt-", col.name = "percent_mito")
+head(data@meta.data)
+```
+
+Lets Visualize Raw Data Quality Stats
+
+```{r}
+VlnPlot(data, features = c("nCount_Spatial", "nFeature_Spatial", "percent_mito"
+), pt.size = 0.1, ncol = 2) + NoLegend()
+SpatialFeaturePlot(data, features = c("nCount_Spatial"))
+SpatialFeaturePlot(data, features = c( "nFeature_Spatial"))
+SpatialFeaturePlot(data, features = c("percent_mito"))
+```
+
+# 2) QC Filtration
+
+Filtration of Low Quality Spots
+
+```{r}
+
+data <- data[, data$nFeature_Spatial > 500 & data$percent_mito < 25]
+```
+
+After QC, check for the remaining spots
+
+```{r}
+Spots_Count <- ncol(data)
+Spots_Count 
+```
+
+Create Output directory
+
+```{r}
+output_dir <- "Output" 
+if (!dir.exists(output_dir)){
+dir.create(output_dir)
+} else {
+    print("Dir already exists!")
+}
+```
+
+Save Filtrated Seurat object
+
+```{r}
+saveRDS(file="Output/data_B1_filtered", data)
+```
+
+# 3) Data Normalization
+
+Here we will use SCTransform method for normalization as recommended for Spatial transcirptome datasets.
+
+In single cell, we work with "RNA" assay but in Spatial data, we have to select "Spatial" assay.
+
+```{r}
+data <- SCTransform(data, assay = "Spatial", verbose = FALSE)
+data
+```
+
+Top variable genes
+
+```{r}
+data@assays$SCT
+```
+
+Spatial plots based on top variable genes
+
+```{r}
+
+plot3 <- SpatialFeaturePlot(data, features = "Krt13", pt.size.factor = 1.5)
+plot4 <- SpatialFeaturePlot(data, features = "Igha",  pt.size.factor = 1.5)
+plot3 + plot4
+
+```
+
+```{r}
+plot3 + plot4
+```
+
+# 4) Cluster Identification
+
+We can then proceed to run dimensional reduction and clustering on the RNA expression data, using the same workflow as we use for scRNA-seq analysis. Dimensional reduction, clustering, and visualization#
+
+```{r}
+data <- RunPCA(data, assay = "SCT", verbose = FALSE)
+data <- FindNeighbors(data, reduction = "pca", dims = 1:30)
+data  <- FindClusters(data, verbose = FALSE,   resolution = 0.3)
+data  <- RunUMAP(data, reduction = "pca", dims = 1:30) 
+```
+
+We can then visualize the results of the clustering either in UMAP space (with DimPlot()) or overlaid on the image with SpatialDimPlot().
+
+```{r}
+plot5 <- DimPlot(data, reduction = "umap", label = TRUE)
+plot6 <- SpatialDimPlot(data, label = TRUE, label.size = 3)
+plot5 + plot6
+```
+
+Highlight Specific clusters
+
+```{r}
+
+SpatialDimPlot(data, cells.highlight = CellsByIdentities(object = data, idents = c(1,2,3,4
+                                                                                   )), facet.highlight = TRUE, ncol = 3)
+
+```
+
+Identification of Spatially Variable Features
+
+```{r}
+
+B1.markers <- FindAllMarkers(data, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+```
+
+Filter for significant markers ( Note : Change n value \> 5 if interested in more than 5 markers per cluster)
+
+```{r}
+B1.markers <- subset(A1.markers, p_val_adj < 0.05)
+B1.markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 5, order_by = avg_log2FC) -> top2 
+```
+
+Save top ranked marker list
+
+```{r}
+write.table(file="Output/top_markers_B1", top2)
+```
+
+# 5) Subset Seurat object based on Anatomical regions
+
+```{r}
+sub <- subset(data, idents = c(3,4)) 
+plot7 <- SpatialDimPlot(sub, crop = TRUE, label = TRUE)
+plot8 <- SpatialDimPlot(sub, crop = FALSE, label = TRUE, pt.size.factor = 1, label.size = 3)
+plot7 + plot8
+```
+
+# 6) Data Visualization
+
+6.1) Spatial Expression plots
+
+```{r}
+
+SpatialFeaturePlot(data, features = "Cyp2c55") # Cluster3 
+SpatialFeaturePlot(data, features = "Malat1") # Cluster4 
+
+```
+
+Lets visualize Spatial Markers with different alpha values (to control opacity of spots) Control Opacity of Spots based on alpha variable(ranges from 0 to 0.5
+
+```{r}
+
+plot9 <- SpatialFeaturePlot(data, features = "Cyp2c55",alpha = c(0.1, 0.5)) # Cluster4 
+plot9
+```
+
+Control Opacity of Spots based on alpha variable(ranges from 0.1 to 0.9)
+
+```{r}
+
+plot10 <- SpatialFeaturePlot(data, features = "Cyp2c55",alpha = c(0.1, 0.9)) # Cluster4 
+plot10
+```
+
+comparison of expression plot with different alpha variable
+
+```{r}
+
+plot9 + plot10 
+```
+
+Lets perform Spatial gene expression plots without studied tissue Image (ranges from 0 to 1)
+
+```{r}
+
+plot11 <- SpatialFeaturePlot(data, features = "Cyp2c55",alpha = c(0.1, 1),image.alpha = 0.1) # Cluster4 
+plot11
+```
+
+To add grid lines(ranges from 0 to 1) to carefully inspect different anatomical regions (This technique is sometimes useful when examining tissues with distinct compartments, such as the spleen.
+
+```{r}
+plot12 <- plot11 + theme(plot.background = element_rect(fill = "black") )
+plot12
+```
+
+expression plot with and without tissue image
+
+```{r}
+plot9 + plot11
+```
+
+comparison of expression plot with and without tissue image (including grid lines)
+
+```{r}
+plot9 + plot12
+```
+
+6.2) Spatial Clusters
+
+Heatmap Plots
+
+```{r}
+
+DoHeatmap(object = data,  features = top2$gene) + scale_fill_gradientn(colors = c("#3399FF", "black", "#FF6666"))
+```

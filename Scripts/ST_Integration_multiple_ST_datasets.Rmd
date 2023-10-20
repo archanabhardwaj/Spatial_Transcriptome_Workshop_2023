@@ -1,0 +1,203 @@
+---
+title: "ST_multi_samples_integration"
+author: "Archana"
+date: "2023-10-19"
+output: html_document
+---
+
+```{r}
+
+library(Seurat)
+library(SeuratData)
+library(ggplot2)
+library(patchwork)
+library(dplyr)
+library(DoMultiBarHeatmap)
+```
+
+
+In this tutorial, we will cover important Steps for Spatial Transcriptome (ST) multi samples ST data integration analysis 1) load Pre-processed ST data sets 2) Data Normalization 3) Cluster Identification 4) Subset anatomical regions 5) Data Visualization 5.1) Spatial Expression plots 5.2) SpatialClusters
+
+# 1) load Pre-processed ST data sets
+
+Load Filtered ST data
+
+```{r}
+data_A1 <- readRDS(file="Output/data_A1_filtered")
+data_B1 <-  readRDS(file="Output/data_B1_filtered")
+```
+
+# 2) Data Normalization
+
+```{r}
+st.list = list(A1 = data_A1, B1 = data_B1)
+st.list = lapply(st.list, SCTransform, assay = "Spatial", method = "poisson")
+```
+
+need to set maxSize for PrepSCTIntegration to work
+
+```{r}
+
+options(future.globals.maxSize = 2000 * 1024^2)  # set allowed size to 2K MiB
+```
+
+N number of features \#
+
+```{r}
+
+st.features = SelectIntegrationFeatures(st.list, nfeatures = 3000, verbose = FALSE)
+st.list <- PrepSCTIntegration(object.list = st.list, anchor.features = st.features,
+                              verbose = FALSE)
+```
+
+Now we can perform the actual integration
+
+```{r}
+int.anchors <- FindIntegrationAnchors(object.list = st.list, normalization.method = "SCT",
+                                      verbose = FALSE, anchor.features = st.features)
+st.integrated <- IntegrateData(anchorset = int.anchors, normalization.method = "SCT",
+                                  verbose = FALSE)
+
+```
+
+```{r}
+
+rm(int.anchors, st.list)
+gc()
+```
+
+```{r}
+
+saveRDS(file="Output/integrated_samples_AB", st.integrated)
+
+```
+
+# 3) Cluster Identification
+
+We can then proceed to run dimensional reduction and clustering on the RNA expression data, using the same workflow as we use for scRNA-seq analysis.
+
+Dimensional reduction, clustering, and visualization
+
+```{r}
+st.integrated <- RunPCA(st.integrated, verbose = FALSE)
+st.integrated <- FindNeighbors(st.integrated, dims = 1:30)
+st.integrated <- FindClusters(st.integrated, verbose = FALSE, res = 0.3)
+st.integrated <- RunUMAP(st.integrated, dims = 1:30)
+```
+
+UMAP plots after integration
+
+```{r}
+
+plot1 <- DimPlot(st.integrated, reduction = "umap", group.by = c("ident", "orig.ident"))
+plot1
+```
+
+Highlight Specific clusters \####
+
+```{r}
+
+plot2 <- SpatialDimPlot(st.integrated, images ="A1", cells.highlight = CellsByIdentities(object = st.integrated, idents = c(2,3
+                                                                                   )), facet.highlight = TRUE, ncol = 2)
+plot2
+```
+
+```{r}
+
+plot3 <- SpatialDimPlot(st.integrated,   crop = FALSE, images ="B1", cells.highlight = CellsByIdentities(object = st.integrated, idents = c(2, 3
+                                                                                                                  )), facet.highlight = TRUE, ncol = 2)
+plot3
+```
+
+# 4) Subset out anatomical regions
+
+(i.e clusters) from integrated seurat object
+
+```{r}
+
+st_subset <- subset(st.integrated, idents = c(2,3)) 
+
+plot4 <- SpatialDimPlot(st_subset, images ="A1")
+plot4
+
+plot5 <- SpatialDimPlot(st_subset, images ="B1")
+plot5
+
+plot4 + plot5 
+```
+
+Filter for significant markers ( Note : Change n value \> 5 if interested in more than 5 markers per cluster)
+
+```{r}
+
+int.markers <- FindAllMarkers(st.integrated, only.pos = TRUE, min.pct = 0.25, logfc.threshold = 0.25)
+int.markers <- subset(int.markers, p_val_adj < 0.05)
+int.markers %>%
+  group_by(cluster) %>%
+  slice_max(n = 5, order_by = avg_log2FC) -> top2
+```
+
+Save top ranked marker list
+
+```{r}
+
+write.table(file="Output/top_markers_integrated1", top2)
+```
+
+# 5) Data Visualization
+
+5.1) Spatial Gene Expression plots
+
+```{r}
+
+SpatialFeaturePlot(st.integrated, features = "Cd24a") # Cluster2 
+SpatialFeaturePlot(st.integrated, features = "Ckm") # Cluster3 
+```
+
+Spatial Markers with different alpha (to control opacity of spots) \# \# Control Opacity of Spots based on alpha variable(ranges from 0 to 0.5)
+
+```{r}
+
+plot6 <- SpatialFeaturePlot(st.integrated, features = "Cd24a",alpha = c(0.1, 0.5)) # Cluster2 
+plot6
+```
+
+Control Opacity of Spots based on alpha variable(ranges from 0.1 to 0.9)
+
+```{r}
+plot7 <- SpatialFeaturePlot(st.integrated, features = "Cd24a",alpha = c(0.1, 0.9)) # Cluster2 
+plot7
+```
+
+```{r}
+
+# Without background Image (ranges from 0 to 1)
+plot8 <- SpatialFeaturePlot(st.integrated, features = "Cd24a", alpha = c(0.1, 1),image.alpha = 0.1) # Cluster2 
+plot8
+
+```
+
+Add grid lines to carefully inspect different anatomical regions (This technique is sometimes useful when examining tissues with distinct compartments, such as the spleen.
+
+```{r}
+
+plot9 <- SpatialFeaturePlot(st.integrated, features = "Cd24a", alpha = c(0.1, 1),image.alpha = 0.1) + theme(plot.background = element_rect(fill = "black") )
+plot9
+```
+
+5)  Data Visualization 5.2 Spatial Clusters \################################## \# Heatmap Plots#
+
+Add cluster labels
+
+```{r}
+
+DoHeatmap(object = st.integrated,  features = top2$gene) + scale_fill_gradientn(colors = c("#3399FF", "black", "#FF6666"))
+head(st.integrated)
+```
+
+Add cluster labels together with Sample information (A1 and B1)
+
+```{r}
+
+DoMultiBarHeatmap(object = st.integrated, group.by="integrated_snn_res.0.3", additional.group.by="orig.ident", features = top2$gene) + scale_fill_gradientn(colors = c("#3399FF", "black", "#FF6666"))
+```
