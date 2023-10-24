@@ -5,6 +5,9 @@ date: "2023-10-19"
 output: html_document
 ---
 
+
+
+
 ```{r}
 
 library(Seurat)
@@ -18,6 +21,13 @@ library(dplyr)
 In this tutorial, we will cover important Steps for Spatial Transcriptome (ST) data analysis 1) Check Raw data 2) Perform QC 3) Data Normalization 4) Cluster Identification 5) Subset Seurat object based on Anatomical regions 6) Data Visualization of 6.1) Spatial Expression plots 6.2) Spatial Clusters
 
 The visium test data from 10x consists of the following data types: a) A spot by gene expression matrix [ .h5 format]. b) An image of the tissue slice (obtained from H&E staining during data acquisition) [Spatial]. c) Scaling factors that relate the original high resolution image to the lower resolution image used here for visualization [Spatial].
+
+
+Set working directory for the analysis of ST datasets. One can follow example given below: 
+
+1) Check directory path in your working laptop[ eg. "Desktop/Projects/Workshop" ] 
+2) Copy directory path into function "setwd" by calling as setwd("Desktop/Projects/Workshop")
+
 
 # 1) Check Raw ST data
 
