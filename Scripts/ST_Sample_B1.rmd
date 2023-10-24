@@ -20,6 +20,15 @@ In this tutorial, we will cover important Steps for Spatial Transcriptome (ST) d
 
 The visium test data from 10x consists of the following data types: a) A spot by gene expression matrix [ .h5 format]. b) An image of the tissue slice (obtained from H&E staining during data acquisition) [Spatial]. c) Scaling factors that relate the original high resolution image to the lower resolution image used here for visualization [Spatial].
 
+
+Note : Set working directory for the analysis of ST datasets. One can follow example given below: 
+
+Open R and  
+1) call the `setwd()` function and paste the directory path inside the parentheses, like this: `setwd("Desktop/Projects/Workshop")`.
+2) Make sure to replace "Desktop/Projects/Workshop" with the actual directory path that you copied earlier. 
+3) This will set your current working directory to the specified directory, allowing you to access files and data within that folder.
+
+
 # 1) Check Raw ST data
 
 Load ST data#
