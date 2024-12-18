@@ -1,0 +1,1 @@
+This repository features beginner-level scripts designed for the "Fundamentals of Transcriptomics Data Analysis" course held in 2023 (IKMB, Kiel). It provides hands-on experience with spatial transcriptomic datasets, utilizing cutting-edge bioinformatics tools and analysis pipelines. 
